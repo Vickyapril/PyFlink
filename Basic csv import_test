@@ -1,0 +1,54 @@
+from pyflink.dataset import ExecutionEnvironment
+from pyflink.table import DataTypes, BatchTableEnvironment
+from pyflink.table.descriptors import Schema, OldCsv, FileSystem
+
+import os
+import time
+
+# Data source file (Suppose our data is stored in a CSV file)
+source_file = 'Population_china.csv'
+# Result file (Suppose store the data into the CSV file)
+sink_file = 'Population_information_More_Than_5_Million.csv'
+
+# Create a Environment
+exec_env = ExecutionEnvironment.get_execution_environment()
+exec_env.set_parallelism(1)
+
+t_env = BatchTableEnvironment.create(exec_env)
+
+
+# Delete the result file if the it exists,
+if os.path.exists(sink_file):
+    os.remove(sink_file)
+
+# Create the Source connector by using `connect` method.
+t_env.connect(FileSystem().path(source_file)) \
+    .with_format(OldCsv()
+                 .field('Province', DataTypes.STRING())
+                 .field('Population', DataTypes.BIGINT())) \
+    .with_schema(Schema()
+                 .field('Province', DataTypes.STRING())
+                 .field('Population', DataTypes.BIGINT())) \
+    .register_table_source('source_tab')
+
+# Create the Sink connector by using `connect` method.
+t_env.connect(FileSystem().path(sink_file)) \
+    .with_format(OldCsv()
+                 .field_delimiter(',')
+                 .field('Province', DataTypes.STRING())
+                 .field('Population', DataTypes.BIGINT())) \
+    .with_schema(Schema()
+                 .field('Province', DataTypes.STRING())
+                 .field('Population', DataTypes.BIGINT())) \
+    .register_table_sink('sink_tab')
+
+# Extract provinces with population over 5 million
+t_env.from_path('source_tab') \
+    .select('Province, Population') \
+    .where('Population >= 50000') \
+    .insert_into('sink_tab')
+
+# Execute the Job
+print("run: " + str(time.time()))
+t_env.execute("ETL_Extract_provinces_with_population_over_5_million")
+print("finish: " + str(time.time()))
