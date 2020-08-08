@@ -1,0 +1,41 @@
+import tempfile
+import os
+import shutil
+
+from pyflink.datastream import StreamExecutionEnvironment
+from pyflink.table import StreamTableEnvironment, DataTypes
+from pyflink.table.descriptors import Schema, OldCsv, FileSystem
+
+sink_path = tempfile.gettempdir() + '/streaming.csv'
+
+if os.path.exists(sink_path):
+    if os.path.isfile(sink_path):
+        os.remove(sink_path)
+    else:
+        shutil.rmtree(sink_path)
+
+env = StreamExecutionEnvironment.get_execution_environment()
+env.set_parallelism(1)
+t_env = StreamTableEnvironment.create(env)
+
+t = t_env.from_elements([(1,'hi','hello'),(2,'good','hello')],['a','b','c'])
+
+t_env.connect(FileSystem().path(sink_path)) \
+    .with_format(OldCsv()
+    .field_delimiter(',')
+                 .field("a",DataTypes.BIGINT())
+                 .field("b",DataTypes.STRING())
+                 .field("c",DataTypes.STRING())) \
+    .with_schema(Schema()
+                 .field("a", DataTypes.BIGINT())
+                 .field("b", DataTypes.STRING())
+                 .field("c", DataTypes.STRING())) \
+    .register_table_sink("stream_sink")
+
+t.select("a + 99, b + ' how are you ', c + ' Welcome to Flink Streaming '").insert_into("stream_sink")
+
+t_env.execute("stream_job")
+
+f = open(sink_path)
+lines = f.readlines()
+print(lines)
